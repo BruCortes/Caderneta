@@ -127,7 +127,14 @@ function AuthScreen({ onAuthed }) {
           options: { data: { name: name.trim() } },
         });
         if (err) throw err;
-        if (!data.session) {
+        // truque para descobrir se o e-mail já tinha conta: quando já existe,
+        // o Supabase devolve um usuário "vazio", sem identidades associadas,
+        // em vez de um erro claro (é assim de propósito, por segurança).
+        const emailJaExiste = data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0;
+        if (emailJaExiste) {
+          setError("Esse e-mail já tem uma conta. Tente entrar em vez de cadastrar.");
+          setTab("login");
+        } else if (!data.session) {
           setInfo("Conta criada! Se pedirmos confirmação por e-mail, verifique sua caixa de entrada antes de entrar.");
           setTab("login");
         } else {
