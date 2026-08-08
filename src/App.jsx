@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  ComposedChart, Line
 } from "recharts";
 import { Plus, Trash2, ChevronLeft, ChevronRight, Copy, X, Sparkles, LogOut, Check } from "lucide-react";
 import { supabase } from "./supabaseClient";
@@ -98,22 +99,116 @@ function Jar({ pct, color, size = 72, empty }) {
 }
 
 /* ---------------------------------------------------------
-   ONBOARDING
+   LOGIN / CADASTRO — usa o sistema de autenticação do Supabase
+   (e-mail + senha), para que a mesma pessoa entre de qualquer
+   aparelho e continue vendo os mesmos dados.
 --------------------------------------------------------- */
-function Onboarding({ onSubmit }) {
-  const [mode, setMode] = useState("pessoal");
+function AuthScreen({ onAuthed }) {
+  const [tab, setTab] = useState("login"); // login | cadastro
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [info, setInfo] = useState(null);
+
+  const canSubmit = email.trim().length > 3 && password.length >= 6 && (tab === "login" || name.trim().length > 0);
+
+  async function submit() {
+    if (!canSubmit || loading) return;
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      if (tab === "cadastro") {
+        const { data, error: err } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { name: name.trim() } },
+        });
+        if (err) throw err;
+        if (!data.session) {
+          setInfo("Conta criada! Se pedirmos confirmação por e-mail, verifique sua caixa de entrada antes de entrar.");
+          setTab("login");
+        } else {
+          onAuthed(data.user);
+        }
+      } else {
+        const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (err) throw err;
+        onAuthed(data.user);
+      }
+    } catch (e) {
+      setError(e.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : e.message);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ minHeight: 560, background: THEME.cover, borderRadius: 16, padding: "2.5rem 1.75rem", fontFamily: "Inter, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <style>{FONTS}</style>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 40, marginBottom: 4 }}>📗</div>
+          <h1 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.goldSoft, fontSize: 26, fontWeight: 700, margin: 0 }}>
+            Caderneta
+          </h1>
+          <p style={{ color: "#A9B4A9", fontSize: 14, marginTop: 6 }}>Entre com sua conta para acessar de qualquer aparelho.</p>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <button onClick={() => { setTab("login"); setError(null); }}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, cursor: "pointer", border: "none", background: tab === "login" ? THEME.gold : THEME.coverAlt, color: tab === "login" ? "#1D1508" : "#A9B4A9", fontWeight: 600, fontSize: 13.5 }}>
+            Entrar
+          </button>
+          <button onClick={() => { setTab("cadastro"); setError(null); }}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, cursor: "pointer", border: "none", background: tab === "cadastro" ? THEME.gold : THEME.coverAlt, color: tab === "cadastro" ? "#1D1508" : "#A9B4A9", fontWeight: 600, fontSize: 13.5 }}>
+            Criar conta
+          </button>
+        </div>
+
+        {tab === "cadastro" && (
+          <>
+            <label style={{ color: THEME.goldSoft, fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>Como podemos te chamar?</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome"
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 15, marginBottom: 14 }} />
+          </>
+        )}
+
+        <label style={{ color: THEME.goldSoft, fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>E-mail</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" type="email"
+          style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 15, marginBottom: 14 }} />
+
+        <label style={{ color: THEME.goldSoft, fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>Senha</label>
+        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="mínimo 6 caracteres" type="password"
+          style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 15, marginBottom: 8 }} />
+
+        {error && <p style={{ color: "#D98B78", fontSize: 12.5, marginTop: 4, marginBottom: 10 }}>{error}</p>}
+        {info && <p style={{ color: THEME.goldSoft, fontSize: 12.5, marginTop: 4, marginBottom: 10 }}>{info}</p>}
+
+        <button onClick={submit} disabled={!canSubmit || loading}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", marginTop: 10, cursor: canSubmit && !loading ? "pointer" : "not-allowed", background: canSubmit && !loading ? THEME.gold : THEME.coverAlt, color: canSubmit && !loading ? "#1D1508" : "#6b7268", fontSize: 15, fontWeight: 600 }}>
+          {loading ? "Um instante…" : tab === "login" ? "Entrar" : "Criar conta"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   ESCOLHA DO ESPAÇO — só aparece uma vez, no primeiro acesso
+--------------------------------------------------------- */
+function ModeScreen({ onSubmit }) {
+  const [mode, setMode] = useState("pessoal");
   const [codeInput, setCodeInput] = useState("");
   const [joinExisting, setJoinExisting] = useState(false);
-
-  const canSubmit = name.trim().length > 0 && (mode === "pessoal" || !joinExisting || codeInput.trim().length > 0);
+  const canSubmit = mode === "pessoal" || !joinExisting || codeInput.trim().length > 0;
 
   function submit() {
     if (!canSubmit) return;
     onSubmit({
       mode,
-      code: mode === "grupo" ? (joinExisting ? codeInput.trim().toLowerCase() : genCode()) : null,
-      userName: name.trim(),
+      code: mode === "grupo" ? (joinExisting ? codeInput.trim().toLowerCase() : genCode()) : genCode(),
     });
   }
 
@@ -121,22 +216,9 @@ function Onboarding({ onSubmit }) {
     <div style={{ minHeight: 560, background: THEME.cover, borderRadius: 16, padding: "2.5rem 1.75rem", fontFamily: "Inter, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <style>{FONTS}</style>
       <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 40, marginBottom: 4 }}>📗</div>
-          <h1 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.goldSoft, fontSize: 26, fontWeight: 700, margin: 0 }}>
-            Caderneta
-          </h1>
-          <p style={{ color: "#A9B4A9", fontSize: 14, marginTop: 6 }}>Seu controle de orçamento mensal, do jeito de um livro-caixa.</p>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <h1 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.goldSoft, fontSize: 20, fontWeight: 700, margin: 0 }}>Como vai usar a Caderneta?</h1>
         </div>
-
-        <label style={{ color: THEME.goldSoft, fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6 }}>Como podemos te chamar?</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Seu nome"
-          style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 15, marginBottom: 18 }}
-        />
-
         <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <button onClick={() => setMode("pessoal")}
             style={{ flex: 1, padding: "12px 8px", borderRadius: 10, cursor: "pointer", border: mode === "pessoal" ? `2px solid ${THEME.gold}` : "2px solid transparent", background: THEME.coverAlt, color: mode === "pessoal" ? THEME.goldSoft : "#A9B4A9", fontSize: 13, fontWeight: 500 }}>
@@ -147,7 +229,6 @@ function Onboarding({ onSubmit }) {
             👥 Compartilhado
           </button>
         </div>
-
         {mode === "grupo" && (
           <div style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -161,19 +242,14 @@ function Onboarding({ onSubmit }) {
               </button>
             </div>
             {joinExisting && (
-              <input
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-                placeholder="código do grupo (ex: familia-silva)"
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 14, fontFamily: "'IBM Plex Mono', monospace" }}
-              />
+              <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="código do grupo (ex: familia-silva)"
+                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "none", background: THEME.page, color: THEME.ink, fontSize: 14, fontFamily: "'IBM Plex Mono', monospace" }} />
             )}
             {!joinExisting && (
               <p style={{ color: "#A9B4A9", fontSize: 12.5, margin: 0 }}>Vamos gerar um código único. Compartilhe com quem for dividir esse orçamento com você.</p>
             )}
           </div>
         )}
-
         <button onClick={submit} disabled={!canSubmit}
           style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", cursor: canSubmit ? "pointer" : "not-allowed", background: canSubmit ? THEME.gold : THEME.coverAlt, color: canSubmit ? "#1D1508" : "#6b7268", fontSize: 15, fontWeight: 600 }}>
           Abrir caderneta
@@ -186,7 +262,7 @@ function Onboarding({ onSubmit }) {
 /* ---------------------------------------------------------
    MODAL: NOVA TRANSAÇÃO
 --------------------------------------------------------- */
-function AddTransactionModal({ categories, onClose, onSave }) {
+function AddTransactionModal({ categories, onClose, onSave, isDesktop }) {
   const [type, setType] = useState("despesa");
   const [amount, setAmount] = useState("");
   const [catId, setCatId] = useState(categories[0]?.id || "outros");
@@ -207,8 +283,8 @@ function AddTransactionModal({ categories, onClose, onSave }) {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(22,38,29,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, background: THEME.page, borderRadius: "18px 18px 0 0", padding: "1.5rem", maxHeight: "88vh", overflowY: "auto", fontFamily: "Inter, sans-serif" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(22,38,29,0.55)", display: "flex", alignItems: isDesktop ? "center" : "flex-end", justifyContent: "center", zIndex: 50, padding: isDesktop ? 16 : 0 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, background: THEME.page, borderRadius: isDesktop ? 18 : "18px 18px 0 0", padding: "1.5rem", maxHeight: "88vh", overflowY: "auto", fontFamily: "Inter, sans-serif", boxShadow: isDesktop ? "0 20px 50px rgba(0,0,0,0.35)" : "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <h3 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.ink, margin: 0, fontSize: 19 }}>Novo lançamento</h3>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: THEME.inkSoft }}><X size={20} /></button>
@@ -237,7 +313,7 @@ function AddTransactionModal({ categories, onClose, onSave }) {
         {type === "despesa" && (
           <>
             <label style={{ fontSize: 12.5, color: THEME.inkSoft, fontWeight: 500 }}>Categoria</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, margin: "6px 0 16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${isDesktop ? 5 : 4}, 1fr)`, gap: 8, margin: "6px 0 16px" }}>
               {categories.map((c) => (
                 <button key={c.id} onClick={() => setCatId(c.id)}
                   style={{ padding: "10px 4px", borderRadius: 8, cursor: "pointer", border: `2px solid ${catId === c.id ? c.color : THEME.line}`, background: catId === c.id ? c.color + "22" : "transparent", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
@@ -310,6 +386,7 @@ function PremiumModal({ onClose }) {
 --------------------------------------------------------- */
 export default function CadernetaApp() {
   const [phase, setPhase] = useState("loading");
+  const [user, setUser] = useState(null);
   const [settings, setSettings] = useState(null);
   const [workspaceKey, setWorkspaceKey] = useState(null);
   const [shared, setShared] = useState(false);
@@ -321,16 +398,44 @@ export default function CadernetaApp() {
   const [showCopied, setShowCopied] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [newCatName, setNewCatName] = useState("");
+  const [isDesktop, setIsDesktop] = useState(typeof window !== "undefined" ? window.innerWidth >= 720 : false);
+
+  useEffect(() => {
+    function onResize() { setIsDesktop(window.innerWidth >= 720); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const raw = localStorage.getItem("app-settings");
-      if (!raw) { setPhase("onboarding"); return; }
-      const s = JSON.parse(raw);
-      setSettings(s);
-      await enterWorkspace(s.mode, s.code, s.userName);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setPhase("auth"); return; }
+      await afterAuth(session.user);
     })();
   }, []);
+
+  async function afterAuth(authUser) {
+    setUser(authUser);
+    try {
+      const { data: row, error } = await supabase.from("user_settings").select("*").eq("user_id", authUser.id).single();
+      if (error || !row) throw new Error("sem preferências salvas ainda");
+      const s = { mode: row.mode, code: row.code, userName: row.user_name };
+      setSettings(s);
+      await enterWorkspace(s.mode, s.code, s.userName);
+    } catch {
+      setPhase("choose-mode");
+    }
+  }
+
+  async function handleModeSubmit({ mode, code }) {
+    const userName = user.user_metadata?.name || user.email;
+    const s = { mode, code, userName };
+    setSettings(s);
+    try {
+      await supabase.from("user_settings").upsert({ user_id: user.id, mode, code, user_name: userName });
+    } catch (e) {}
+    await enterWorkspace(mode, code, userName);
+  }
 
   async function enterWorkspace(mode, code, userName) {
     const key = `workspace:${code}`;
@@ -359,21 +464,12 @@ export default function CadernetaApp() {
     }
   }
 
-  async function handleOnboardingSubmit({ mode, code, userName }) {
-    // no modo pessoal, geramos um código único escondido, só para
-    // identificar essa "gaveta" de dados no banco — o usuário nunca vê.
-    const finalCode = mode === "grupo" ? code : genCode();
-    const s = { mode, code: finalCode, userName };
-    setSettings(s);
-    localStorage.setItem("app-settings", JSON.stringify(s));
-    await enterWorkspace(mode, finalCode, userName);
-  }
-
-  function leaveWorkspace() {
-    localStorage.removeItem("app-settings");
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
     setSettings(null);
     setData(null);
-    setPhase("onboarding");
+    setPhase("auth");
   }
 
   function addTransaction(tx) {
@@ -420,6 +516,17 @@ export default function CadernetaApp() {
   const expense = useMemo(() => monthTx.filter((t) => t.type === "despesa").reduce((s, t) => s + t.amount, 0), [monthTx]);
   const saldo = income - expense;
 
+  // saldo acumulado: soma tudo desde o primeiro lançamento até o fim do mês
+  // selecionado (o que sobra ou falta de um mês "entra" no seguinte, como
+  // um extrato bancário de verdade — diferente do saldo do mês, que zera
+  // a cada troca de mês).
+  const saldoAcumulado = useMemo(() => {
+    if (!data) return 0;
+    return data.transactions
+      .filter((t) => monthKey(t.date) <= currentMonth)
+      .reduce((s, t) => s + (t.type === "receita" ? t.amount : -t.amount), 0);
+  }, [data, currentMonth]);
+
   const spentByCat = useMemo(() => {
     const map = {};
     monthTx.filter((t) => t.type === "despesa").forEach((t) => { map[t.category] = (map[t.category] || 0) + t.amount; });
@@ -441,10 +548,14 @@ export default function CadernetaApp() {
       const d = new Date(cy, cm - 1 - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       const txs = data.transactions.filter((t) => monthKey(t.date) === key);
+      const acumuladoAteAqui = data.transactions
+        .filter((t) => monthKey(t.date) <= key)
+        .reduce((s, t) => s + (t.type === "receita" ? t.amount : -t.amount), 0);
       out.push({
         mes: monthLabel(key),
         Receitas: Math.round(txs.filter((t) => t.type === "receita").reduce((s, t) => s + t.amount, 0)),
         Despesas: Math.round(txs.filter((t) => t.type === "despesa").reduce((s, t) => s + t.amount, 0)),
+        Acumulado: Math.round(acumuladoAteAqui),
       });
     }
     return out;
@@ -465,7 +576,8 @@ export default function CadernetaApp() {
       </div>
     );
   }
-  if (phase === "onboarding") return <Onboarding onSubmit={handleOnboardingSubmit} />;
+  if (phase === "auth") return <AuthScreen onAuthed={afterAuth} />;
+  if (phase === "choose-mode") return <ModeScreen onSubmit={handleModeSubmit} />;
 
   const catById = Object.fromEntries((data.categories || []).map((c) => [c.id, c]));
   const tabs = [
@@ -476,11 +588,12 @@ export default function CadernetaApp() {
   ];
 
   return (
-    <div style={{ background: THEME.cover, borderRadius: 16, overflow: "hidden", fontFamily: "Inter, sans-serif", maxWidth: 780, margin: "0 auto" }}>
+    <div style={{ background: isDesktop ? THEME.pageAlt : "transparent", padding: isDesktop ? "2.5rem 1.5rem" : 0, minHeight: isDesktop ? "100vh" : "auto", boxSizing: "border-box" }}>
       <style>{FONTS}</style>
+      <div style={{ background: THEME.cover, borderRadius: isDesktop ? 20 : 16, overflow: "hidden", fontFamily: "Inter, sans-serif", maxWidth: isDesktop ? 860 : 780, margin: "0 auto", boxShadow: isDesktop ? "0 20px 50px rgba(0,0,0,0.25)" : "none" }}>
 
       {/* CAPA / cabeçalho */}
-      <div style={{ padding: "1.25rem 1.25rem 0.75rem" }}>
+      <div style={{ padding: isDesktop ? "1.75rem 2rem 1rem" : "1.25rem 1.25rem 0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -501,7 +614,7 @@ export default function CadernetaApp() {
               style={{ display: "flex", alignItems: "center", gap: 5, border: `1px solid ${THEME.gold}`, background: "transparent", color: THEME.goldSoft, borderRadius: 20, padding: "5px 10px", fontSize: 11.5, cursor: "pointer" }}>
               <Sparkles size={12} /> Grátis
             </button>
-            <button onClick={leaveWorkspace} title="Trocar caderneta"
+            <button onClick={handleLogout} title="Sair da conta"
               style={{ border: "none", background: "transparent", color: "#A9B4A9", cursor: "pointer", padding: 5 }}>
               <LogOut size={16} />
             </button>
@@ -527,7 +640,7 @@ export default function CadernetaApp() {
       </div>
 
       {/* PÁGINA */}
-      <div style={{ background: THEME.page, minHeight: 480, padding: "1.5rem 1.25rem 5rem", position: "relative" }}>
+      <div style={{ background: THEME.page, minHeight: 480, padding: isDesktop ? "2rem 2.5rem 5rem" : "1.5rem 1.25rem 5rem", position: "relative" }}>
         {saveError && (
           <div style={{ background: THEME.expenseSoft, color: THEME.expense, padding: "8px 12px", borderRadius: 8, fontSize: 12.5, marginBottom: 14 }}>{saveError}</div>
         )}
@@ -544,19 +657,29 @@ export default function CadernetaApp() {
                 <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, fontWeight: 600, color: THEME.expense }}>{fmtBRL(expense)}</div>
               </div>
               <div style={{ background: THEME.pageAlt, borderRadius: 12, padding: "12px 10px" }}>
-                <div style={{ fontSize: 11.5, color: THEME.inkSoft }}>Saldo</div>
+                <div style={{ fontSize: 11.5, color: THEME.inkSoft }}>Saldo do mês</div>
                 <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, fontWeight: 600, color: saldo >= 0 ? THEME.ink : THEME.expense }}>{fmtBRL(saldo)}</div>
               </div>
             </div>
 
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: THEME.cover, borderRadius: 12, padding: "14px 16px", marginBottom: 22 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#A9B4A9" }}>Saldo acumulado até {monthLabel(currentMonth)}</div>
+                <div style={{ fontSize: 10.5, color: "#7C8A7E", marginTop: 2 }}>Soma de todos os meses, do início até aqui</div>
+              </div>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 19, fontWeight: 600, color: saldoAcumulado >= 0 ? THEME.goldSoft : "#D98B78" }}>
+                {fmtBRL(saldoAcumulado)}
+              </div>
+            </div>
+
             <h3 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.ink, fontSize: 15, marginBottom: 10 }}>Potes do mês</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(78px, 1fr))", gap: 10, marginBottom: 26 }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${isDesktop ? 92 : 78}px, 1fr))`, gap: isDesktop ? 16 : 10, marginBottom: 26 }}>
               {data.categories.map((c) => {
                 const spent = spentByCat[c.id] || 0;
                 const pct = c.limit > 0 ? (spent / c.limit) * 100 : 0;
                 return (
                   <div key={c.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <Jar pct={pct} color={c.color} empty={c.limit === 0} size={54} />
+                    <Jar pct={pct} color={c.color} empty={c.limit === 0} size={isDesktop ? 66 : 54} />
                     <span style={{ fontSize: 10.5, color: THEME.ink, textAlign: "center" }}>{c.emoji} {c.name}</span>
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, color: THEME.inkSoft }}>
                       {c.limit > 0 ? `${fmtBRL(spent)} / ${fmtBRL(c.limit)}` : fmtBRL(spent)}
@@ -569,7 +692,7 @@ export default function CadernetaApp() {
             {pieData.length > 0 && (
               <div style={{ marginBottom: 26 }}>
                 <h3 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.ink, fontSize: 15, marginBottom: 6 }}>Despesas por categoria</h3>
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={isDesktop ? 260 : 220}>
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={(e) => e.name}>
                       {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -580,9 +703,10 @@ export default function CadernetaApp() {
               </div>
             )}
 
-            <h3 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.ink, fontSize: 15, marginBottom: 6 }}>Últimos 6 meses</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={trendData}>
+            <h3 style={{ fontFamily: "'Roboto Slab', serif", color: THEME.ink, fontSize: 15, marginBottom: 2 }}>Últimos 6 meses</h3>
+            <p style={{ fontSize: 11.5, color: THEME.inkSoft, marginTop: 0, marginBottom: 6 }}>Barras = receita e despesa de cada mês · Linha dourada = saldo acumulado</p>
+            <ResponsiveContainer width="100%" height={isDesktop ? 280 : 240}>
+              <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={THEME.line} />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: THEME.inkSoft }} />
                 <YAxis tick={{ fontSize: 10, fill: THEME.inkSoft }} />
@@ -590,7 +714,8 @@ export default function CadernetaApp() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="Receitas" fill={THEME.income} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Despesas" fill={THEME.expense} radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="Acumulado" stroke={THEME.gold} strokeWidth={2.5} dot={{ r: 3, fill: THEME.gold }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </>
         )}
@@ -717,8 +842,9 @@ export default function CadernetaApp() {
         </button>
       </div>
 
-      {showAdd && <AddTransactionModal categories={data.categories} onClose={() => setShowAdd(false)} onSave={addTransaction} />}
-      {showPremium && <PremiumModal onClose={() => setShowPremium(false)} />}
+      {showAdd && <AddTransactionModal categories={data.categories} onClose={() => setShowAdd(false)} onSave={addTransaction} isDesktop={isDesktop} />}
+      {showPremium && <PremiumModal onClose={() => setShowPremium(false)} isDesktop={isDesktop} />}
+      </div>
     </div>
   );
 }
